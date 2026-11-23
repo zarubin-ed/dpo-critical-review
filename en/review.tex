@@ -1,0 +1,203 @@
+\documentclass[11pt,a4paper]{article}
+
+% --- Encoding and language ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+
+% --- Page layout and font ---
+\usepackage[top=2cm,bottom=2cm,left=2.2cm,right=2.2cm]{geometry}
+\usepackage{microtype}
+\usepackage{parskip} % no paragraph indentation; spacing improves readability in a short document
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+% --- Mathematics ---
+\usepackage{amsmath,amssymb,amsthm}
+\newtheorem{lemma}{Lemma}
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}{Proposition}
+\newtheorem{definition}{Definition}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+
+% --- References and other packages ---
+\usepackage[colorlinks=true,linkcolor=blue,urlcolor=blue,citecolor=blue]{hyperref}
+\usepackage{enumitem}
+\setlist{nosep,leftmargin=1.4em}
+
+% --- Headers and footers ---
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small Review: Direct Preference Optimization}
+\fancyhead[R]{\small \thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% --- Metadata ---
+\title{\vspace{-1.5cm}\textbf{Review of ``Direct Preference Optimization: Your Language Model is Secretly a Reward Model''}}
+\author{Egor Zarubin}
+\date{\today}
+
+\begin{document}
+\maketitle
+\vspace{-0.8cm}
+
+% =========================================================
+\section{Analysis and Evaluation of the Paper}
+% =========================================================
+
+\subsection{Problem Statement and Formalization}
+Let us first summarize the authors' main proposals and claims:
+\begin{enumerate}
+    \item In the standard three-stage RLHF pipeline used in earlier work, they propose replacing the training of a separate reward model and the subsequent RL-based policy optimization with a single training stage.
+    \item They claim that DPO is stable, effective, and computationally efficient.
+    \item DPO fine-tuning is claimed to control the sentiment of generated text better than RLHF and to improve response quality in text summarization and single-turn dialogue.
+    \item DPO is easier to implement and train than RLHF.
+\end{enumerate}
+
+Thus, the authors address the existing RLHF problem: maximizing expected reward with a KL-divergence penalty relative to a reference policy. Their goal is to propose a simpler solution that trains the model directly on human preference data.
+
+The paper adopts the following setting: we fix a reference model $\pi_{\text{ref}}$ and a preference model
+$$p^*(y_1 \succ y_2 \mid x) = \frac{\exp (r^*(x, y_1))}{\exp (r^*(x, y_1)) + \exp (r^*(x, y_2))}.$$
+To train the resulting policy, we solve the optimization problem:
+$$\max_{\pi_\theta} \mathbb{E}_{x \sim \mathcal{D}, y \sim \pi_\theta(y \mid x)} [r_\phi(x, y)] - \beta \mathbb{D}_{\text{KL}} [\pi_\theta(y \mid x) \parallel \pi_{\text{ref}}(y \mid x)].$$
+The authors use the standard RLHF formulation considered in prior work. Both the chosen KL regularization and the assumption about the human preference model are essential to the subsequent DPO derivation.
+
+Although this formulation is consistent with the authors' goal of solving an existing problem in a new way, the theoretical results depend on the chosen preference model and KL regularization, limiting their applicability to other RLHF formulations. Moreover, the authors study a specific RLHF pipeline common in prior work, so their experimental comparisons cannot automatically be generalized to other variants.
+
+\subsection{Theoretical Idea of DPO and Its Evaluation}
+
+The authors' main step is to take the known formula for the optimal policy given a reward function,
+\[\pi_r(y \mid x) = \frac{1}{Z(x)} \pi_{\text{ref}}(y \mid x) \exp \left( \frac{1}{\beta} r(x, y) \right),\]
+express the reward function in terms of this policy, and substitute it into the preference model's loss. The result is a new loss that depends on the preferences, the reference policy, and the trainable policy, but not on an explicit reward function. This is called the \textit{DPO loss}.
+
+In analyzing this loss, the authors emphasize the sigmoid term in its gradient:
+\[\begin{aligned}
+& \nabla_\theta \mathcal{L}_{\text{DPO}}(\pi_\theta; \pi_{\text{ref}}) = \\
+& \quad - \beta \mathbb{E}_{(x, y_w, y_l) \sim \mathcal{D}} \left[ \underbrace{\sigma(\hat{r}_\theta(x, y_l) - \hat{r}_\theta(x, y_w))}_{\text{higher weight for incorrect ranking}} \left[ \underbrace{\nabla_\theta \log \pi(y_w \mid x)}_{\text{increase probability of } y_w} - \underbrace{\nabla_\theta \log \pi(y_l \mid x)}_{\text{decrease probability of } y_l} \right] \right],
+\end{aligned}\]
+even though this coefficient arises automatically when differentiating the proposed loss. Nevertheless, they remove this term in an experiment and claim that doing so leads to ``model degeneration.'' As evidence, they give two examples in which the model gets stuck repeating itself during generation. However, such examples demonstrate only that degradation is possible, not how frequently it occurs.
+
+Appendix A.4 also contains sign errors in the gradient derivation, although the formula in the main text is correct.
+
+In Section 5, particularly Theorem 1, the authors prove that the transformation does not restrict the class of representable reward functions up to equivalence. However, this theorem does not guarantee recovery of the optimal policy by minimizing the DPO loss. That requires additional assumptions about the data, the expressiveness of the policy family, and the optimization procedure.
+All auxiliary statements and the theorem itself are proved correctly; as the authors note, their proofs are straightforward.
+
+In \S 5.2, the authors discuss the normalization term $\beta\log Z(x)$, which depends on the prompt $x$ but not the response $y$. Therefore, subtracting it from the reward does not change the optimal policy. During stochastic gradient estimation, however, such subtraction can reduce estimator variance and thus improve training stability. In standard RLHF, computing the term is difficult because it requires summing over all possible responses, whereas under DPO's chosen parameterization it is zero and need not be computed.
+However, the proposed effect of this term on training is not tested in the experiments, and the authors do not revisit the idea in their discussion. Thus, this explanation of instability lacks independent experimental evidence.
+
+Overall, the main idea of DPO rests on a relatively simple transformation of known results. The mathematical connection between reward and policy is justified, but the explanation of DPO's practical training stability is substantially weaker than the derivation of its loss.
+
+\subsection{Experimental Evaluation}
+The authors select three tasks:
+\begin{enumerate}
+    \item Sentiment-controlled movie review continuation: DPO is compared with a preference-fine-tuned model, a full PPO pipeline, and a model trained to increase the likelihood of preferred responses and decrease that of dispreferred ones (Unlikelihood).
+    \item Text summarization: DPO is compared with GPT-J, its SFT and PFT variants, and Best-of-N SFT, where N responses are sampled from SFT and the best is selected.
+    \item Single-turn dialogue: a comparison similar to the second task, using Pythia-2.8B.
+\end{enumerate}
+The first experiment tests how well DPO optimizes the reward--KL trade-off; the second and third assess its performance on real human preference data.
+Best-of-N is included to test whether comparable results can be achieved by improving response selection at generation time rather than training.
+
+The task selection is relevant to the authors' claims, but the experiments are insufficient to establish all of them. As noted at the start of this review, DPO is claimed to be stable, effective, and computationally efficient. While the authors show quality improvements on the tasks considered, the claims of stability and computational efficiency receive less detailed experimental scrutiny. Although not explicitly promised, a comparison under equal computational budgets is also missing. Nor do the experiments establish whether the findings persist across model sizes, architectures, preference datasets, or RLHF pipelines.
+
+The choice of baselines raises further concerns: DPO is compared with a specific PPO-based RLHF pipeline and several simple training methods, but not with approaches that already allowed direct training on preference data, such as RRHF~\cite{rrhf} and SLiC-HF~\cite{slic-hf}. This limits our ability to assess DPO's advantages over alternative methods.
+
+The experiments in \S 6.2 raise additional questions. First, the authors claim DPO is more robust than PPO to changes in generation temperature. Yet this robustness is not necessarily beneficial: temperature controls generation randomness, and insensitivity of quality to temperature may come at the cost of response diversity. The authors report only model win rates, without studying how temperature affects output diversity. Thus, the results do not show that such robustness is an unconditional advantage of DPO.
+
+The authors also acknowledge that they did not extensively tune the DPO hyperparameter $\beta$, suggesting that this may have led to an underestimate of their method's performance. However, $\beta$ directly affects the DPO loss, so without additional tuning it is hard to assess how close the results are to the best achievable performance. Conversely, the lack of tuning does not imply that DPO could in fact have improved substantially. A fairer comparison would examine both methods' sensitivity to hyperparameters with comparable tuning budgets.
+
+The Anthropic HH experiment raises the most significant concerns. Unlike in summarization, the authors do not fully compare DPO and PPO trained from the same initial model. Instead, they use a pretrained PPO model for which they could not find decoding parameters that outperformed the original Pythia-2.8B. They then suggest Best-of-128 as an approximate benchmark for PPO quality, drawing on the previous experiment. But Best-of-N and PPO are fundamentally different: the former selects the best among sampled responses, while the latter modifies the policy itself. Consequently, these results show an advantage over the evaluated baselines, but not superiority to a well-tuned PPO model in single-turn dialogue.
+
+The authors use GPT-4 as the main judge of response quality in summarization and single-turn dialogue. Citing earlier research, they argue that language models can assess text quality better than automatic metrics. To support the use of GPT-4, in \S 6.3 they compare its judgments with human evaluations.
+
+However, the reliability of this experiment is questionable. Only 25 Stanford students and graduates participated, hardly a representative sample. In addition, the study covers only summarization and a few predefined model comparisons, making it unclear how well the findings generalize to other tasks.
+
+In Table 1, the authors compare win rates from GPT-4 and human evaluations, along with their agreement rates. They conclude that GPT-4 agrees with humans about as often as humans agree with one another. However, without confidence intervals, the reported results do not establish that conclusion unambiguously.
+
+Thus, the experiment provides limited support for using GPT-4 for automated evaluation. Since a substantial share of the paper's results relies on these judgments, this limitation matters for interpreting its experimental conclusions.
+
+\subsection{Novelty and Nontriviality of the Results}
+
+The main idea of DPO builds on known mathematical results. In particular, the formula for the optimal KL-regularized policy predates DPO and was used, for example, in AWR \cite{awr}. Furthermore, combining reward-model and policy training is not a new idea: ASAF \cite{asaf} adopts a similar classifier-based approach to policy learning. Before DPO, methods also existed for training directly on human preferences without a separate reward model or RL optimization, including Direct Preference-based Policy Optimization \cite{an2023}, RRHF \cite{rrhf}, and SLiC-HF \cite{slic-hf}. Thus, DPO's novelty lies not in any individual mathematical tool or in preference learning itself, but in how these ingredients are combined: the authors exploit the analytical connection between reward and optimal policy to derive a loss directly from the Bradley--Terry model. In my view, despite the relative simplicity of the mathematical steps, this is a nontrivial application of existing results that substantially simplifies the standard RLHF pipeline.
+
+% =========================================================
+\section{Ideas for Further Research}
+% =========================================================
+
+\subsection{Generalizing the Preference Model}
+
+DPO uses the Bradley--Terry preference model, but a more general setting is possible. Suppose a human evaluates each response with some random error, $U(x,y)=r(x,y)+\varepsilon_y,$
+where \(\varepsilon_y\) is a random variable with an arbitrary continuous distribution.
+Then the probability of preferring one response over another is
+\[
+P(y_1\succ y_2\mid x)
+=P(\varepsilon_2-\varepsilon_1<r_1-r_2)
+=F(r_1-r_2),
+\]
+where \(F\) is the cumulative distribution function of the difference between the errors.
+
+Using the same relationship between reward and optimal policy as in DPO, we obtain the generalized loss:
+\[
+\mathcal L_F(\theta)
+=-\mathbb E_{\mathcal D}\log F(\beta\log\frac{\pi_\theta(y_w\mid x)}
+{\pi_{\mathrm{ref}}(y_w\mid x)}
+-\beta\log\frac{\pi_\theta(y_l\mid x)}
+{\pi_{\mathrm{ref}}(y_l\mid x)}),
+\]
+
+Thus, standard DPO is a special case with \(F=\sigma\), and this generalization requires no changes to the derivation. For differentiable \(F\), the gradient weight of an example is \(F'(\Delta_\theta)/F(\Delta_\theta)\). For the sigmoid used in DPO, the weight is $\sigma(-\Delta_\theta)$, bounded above by one. If the errors are normally distributed, then $F=\Phi$ and the weight is $\varphi(\Delta_\theta)/\Phi(\Delta_\theta)$, which grows without bound as $\Delta_\theta\to-\infty$. Thus, the choice of preference model strongly affects the contribution of examples whose predicted ordering contradicts the observed preference. It would be interesting to study the effect on training stability.
+
+Another possible generalization is to replace KL divergence with another divergence measure. A different regularizer might produce more diverse generations. It would therefore be useful to determine the conditions under which a divergence still allows the reward function to be expressed through the optimal policy.
+
+\subsection{Additional Experiments}
+
+First, I would like to investigate DPO's claimed stability and computational efficiency in greater detail. DPO, PPO, and related methods such as RRHF and SLiC-HF could be compared under similar computational budgets. The experiment would use the same initial models, datasets, and hardware, allocate equal GPU-hour budgets to each algorithm (including hyperparameter tuning), and compare their achieved quality. It would also be interesting to compare the efficiency of baseline implementations without a fixed budget: training time, epochs needed to reach a target quality, and loss curves. Another experiment could test the hypothesis from \S 5.2 about the normalization term's effect on gradient variance, by comparing PPO with and without corresponding reward normalization and measuring gradient-estimate variance and convergence speed. Since the authors did not extensively tune $\beta$, it would also be worth studying how DPO quality, deviation from the reference policy, and training stability depend on its value. Finally, I would test whether DPO's reported robustness to generation temperature reflects reduced model flexibility by comparing the quality and diversity of DPO and PPO outputs at different temperatures. Such experiments would allow a more objective assessment of DPO's advantages and identify the conditions under which they persist.
+
+\section{Conclusions}
+
+The experiments demonstrate good DPO performance on the tasks considered, but not all of the authors' claims are equally well supported. In particular, questions remain about training stability, computational efficiency, and DPO's advantages over other preference-learning methods.
+
+Despite these limitations, I consider DPO an important contribution, primarily because of the simplicity of the proposed approach. Both theoretical generalizations and more detailed studies of its practical properties offer promising directions for future work.
+
+\begin{thebibliography}{9}
+
+\bibitem{rrhf}
+Z. Yuan et al.
+\textit{RRHF: Rank Responses to Align Language Models
+with Human Feedback without tears}.
+arXiv:2304.05302, 2023.
+\url{https://arxiv.org/abs/2304.05302}
+
+\bibitem{slic-hf}
+Y. Zhao, R. Joshi, T. Liu, M. Khalman, M. Saleh, P. J. Liu.
+\textit{SLiC-HF: Sequence Likelihood Calibration
+with Human Feedback}.
+arXiv preprint arXiv:2305.10425, 2023.
+\url{https://arxiv.org/abs/2305.10425}
+
+\bibitem{awr}
+X. B. Peng, A. Kumar, G. Zhang, S. Levine.
+\textit{Advantage-Weighted Regression:
+Simple and Scalable Off-Policy Reinforcement Learning}.
+arXiv:1910.00177, 2019.
+\url{https://arxiv.org/abs/1910.00177}
+
+\bibitem{asaf}
+P. Barde et al.
+\textit{Adversarial Soft Advantage Fitting:
+Imitation Learning without Policy Optimization}.
+NeurIPS, 2020.
+\url{https://arxiv.org/abs/2006.13258}
+
+\bibitem{an2023}
+G. An et al.
+\textit{Direct Preference-based Policy Optimization
+without Reward Modeling}.
+arXiv:2301.12842, 2023.
+\url{https://arxiv.org/abs/2301.12842}
+
+\end{thebibliography}
+
+\end{document}

@@ -1,58 +1,65 @@
-# Критический разбор статьи Direct Preference Optimization (DPO)
+[English](README.md) | [Русский](README.ru.md)
 
-Критический анализ статьи **«Direct Preference Optimization: Your Language Model is Secretly a Reward Model»** (Rafailov et al., 2023).
+# Critical Review of Direct Preference Optimization (DPO)
 
-В работе рассматриваются математические основы DPO, оцениваются теоретические результаты и экспериментальные выводы авторов, а также предлагаются возможные направления дальнейших исследований.
+A critical analysis of **"Direct Preference Optimization: Your Language Model is Secretly a Reward Model"** (Rafailov et al., 2023).
 
-**[Читать обзор (PDF)](review.pdf)** | [Исходный код LaTeX](review.tex)
+This review examines the mathematical foundations of DPO, evaluates the authors' theoretical results and experimental conclusions, and proposes potential directions for further research.
 
-## Содержание обзора
+**[Read the Review (PDF)](en/review.pdf)** | [LaTeX Source](en/review.tex)
 
-### 1. Теоретический анализ
+## Review Overview
 
-Рассматривается математическая идея DPO — переход от оптимизации политики с использованием отдельной модели награды к непосредственному обучению на данных о предпочтениях.
+### 1. Theoretical Analysis
 
-Основное внимание уделяется:
-- Выводу функции потерь DPO и анализу её градиента.
-- Теореме об эквивалентности классов функций награды и их представлении через политики.
-- Границам теоретических гарантий метода.
-- Объяснению стабильности обучения через нормировку функции награды.
+This section examines the mathematical foundations of DPO, focusing on the transition from policy optimization with a separate reward model to direct learning from preference data.
 
-### 2. Критическая оценка экспериментов
+The main topics include:
 
-Анализируются эксперименты по управлению тональностью генерации, суммаризации текстов и одноходовому диалогу.
+- Derivation of the DPO loss function and analysis of its gradient.
+- The theorem establishing equivalence classes of reward functions and their representation through policies.
+- Limitations of the method's theoretical guarantees.
+- An explanation of training stability through reward function normalization.
 
-Обсуждаются:
-- Достаточность экспериментальных подтверждений стабильности и вычислительной эффективности DPO.
-- Корректность сравнения DPO с PPO и другими алгоритмами обучения на предпочтениях.
-- Влияние гиперпараметра β и температуры генерации.
-- Надёжность использования GPT-4 для автоматической оценки качества ответов.
+### 2. Critical Evaluation of Experiments
 
-### 3. Новизна результатов
+This section analyzes experiments on sentiment control, text summarization, and single-turn dialogue.
 
-Рассматривается связь DPO с предшествующими работами, в том числе AWR, ASAF, RRHF и SLiC-HF.
+The discussion focuses on:
 
-Оценивается, какие элементы подхода были известны ранее и в чём заключается собственный вклад авторов DPO.
+- Whether the experimental evidence sufficiently supports the claimed training stability and computational efficiency of DPO.
+- The fairness of comparisons between DPO, PPO, and other preference-learning algorithms.
+- The influence of the hyperparameter β and generation temperature.
+- The reliability of using GPT-4 for automated response quality evaluation.
 
-## Предложения по дальнейшим исследованиям
+### 3. Novelty of the Results
 
-Вторая часть обзора посвящена возможным направлениям развития DPO.
+This section examines the relationship between DPO and prior approaches, including AWR, ASAF, RRHF, and SLiC-HF.
 
-**Обобщение модели предпочтений.** Вместо модели Bradley–Terry предлагается рассмотреть более общий класс моделей со случайными ошибками оценки ответов. Выводится соответствующая функция потерь и сравниваются свойства градиентных весов для логистического и нормального распределений ошибок.
+It evaluates which elements of the approach were already established in earlier research and identifies the original contributions of the DPO paper.
 
-**Альтернативные регуляризаторы.** Рассматривается возможность замены KL-дивергенции другим регуляризатором с сохранением основной идеи DPO. Обсуждается потенциальное влияние выбора регуляризатора на разнообразие генерируемых ответов.
+## Proposed Research Directions
 
-**Дополнительные эксперименты.** Предлагаются эксперименты для сравнения алгоритмов при одинаковом вычислительном бюджете, исследования дисперсии градиента, влияния параметра β и зависимости качества и разнообразия генераций от температуры.
+The second part of the review explores potential extensions and improvements to DPO.
 
-Предложенные эксперименты являются направлениями дальнейшей работы и не были реализованы в рамках данного обзора.
+**Generalizing the preference model.** Instead of relying on the Bradley–Terry model, the review proposes considering a broader class of preference models with stochastic response evaluation errors. The corresponding loss function is derived, and the properties of gradient weights are compared under logistic and Gaussian error distributions.
 
-## Исходная статья
+**Alternative regularizers.** The possibility of replacing KL divergence with another regularization term while preserving the central idea of DPO is explored. The potential effects of different regularizers on the diversity of generated responses are also discussed.
+
+**Additional experiments.** Several experiments are proposed, including comparisons under equal computational budgets, investigations of gradient variance, analysis of the influence of β, and evaluation of how generation temperature affects response quality and diversity.
+
+These experiments are proposed as directions for future research and **were not implemented as part of this review**.
+
+## Original Paper
 
 Rafailov R. et al. **Direct Preference Optimization: Your Language Model is Secretly a Reward Model.** 2023.
 
 [arXiv:2305.18290](https://arxiv.org/abs/2305.18290)
 
-## Автор
+## Author
 
-Егор Зарубин  
-МФТИ, прикладная математика и информатика, 2026.
+Egor Zarubin  
+Moscow Institute of Physics and Technology (MIPT)  
+Applied Mathematics and Computer Science, 2026.
+
+The English translation was prepared with the help of ChatGPT.
